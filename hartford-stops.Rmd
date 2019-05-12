@@ -1,5 +1,5 @@
 ---
-title: "hartford-traffic"
+title: "Hartford Traffic Stops Data"
 author: "Jeff Huang"
 date: "5/11/2019"
 output: html_document
@@ -14,8 +14,6 @@ library(tidyverse)
 library(lubridate)
 library(ggthemes)
 library(gt)
-library(gganimate)
-library(transformr)
 
 ```
 
@@ -36,6 +34,10 @@ shapes_data <- read_sf("ct_hartford_shapefiles/Hartford_Neighborhoods.shp")
 file_delete(c("shapes.tgz", "ct_hartford_shapefiles/"))
 
 ```
+
+# Who?: Race and Gender
+##
+##
 
 ```{r race_gender, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -83,7 +85,7 @@ gt(race_gender) %>%
 ```
 
 
-# Question 3
+# When?: Trends in policing throughout the day
 
 ```{r time_of_day, echo=FALSE, warning=FALSE, message=FALSE}
 
@@ -105,7 +107,8 @@ hartford %>%
 ```
 
 
-# Question 4
+# Where?: Location of Stops
+
 ```{r stop_locations, echo=FALSE, warning=FALSE, message=FALSE}
 # I wanted to measure the location of stops during night times on weekends for 17-23 year olds to
 # maybe see where college-aged people are going out or where police might see as high-priority areas,
