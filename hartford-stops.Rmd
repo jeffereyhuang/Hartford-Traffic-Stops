@@ -1,0 +1,145 @@
+---
+title: "hartford-traffic"
+author: "Jeff Huang"
+date: "5/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sf)
+library(fs)
+library(tidyverse)
+library(lubridate)
+library(ggthemes)
+library(gt)
+library(gganimate)
+library(transformr)
+
+```
+
+```{r download data, echo=FALSE}
+# Bring in the raw data. The rds data is easy because we can just read it in
+# directly.
+hartford <- read_rds(url("https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ct_hartford_2019_02_25.rds"))
+
+# The shape file is trickier because it is compressed on the webpage.
+download.file(url = "https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ct_hartford_shapefiles_2019_02_25.tgz", destfile = "shapes.tgz", 
+              quiet = TRUE)
+
+# unzip the file
+untar("shapes.tgz")
+
+shapes_data <- read_sf("ct_hartford_shapefiles/Hartford_Neighborhoods.shp")
+
+file_delete(c("shapes.tgz", "ct_hartford_shapefiles/"))
+
+```
+
+```{r race_gender, echo=FALSE, warning=FALSE, message=FALSE}
+
+# looking for percent arrests by race and gender
+race_gender <- hartford %>%
+  select(subject_sex, subject_race, arrest_made) %>%
+  # want arrests made percentage, so group_by var first
+  group_by(arrest_made) %>% 
+  # subsections of sex and race to get subcategories in chart
+  group_by(subject_sex, subject_race) %>%
+  mutate(total = n()) %>%
+  # filter out arrests to make arrest variable
+  filter(arrest_made == FALSE) %>%
+  # gets the percentage of arrests by calculated arrests / total stops ("total" variable)
+  mutate(arrest = total - n()) %>%
+  mutate(freq = arrest/total) %>%
+  summarize(arrest_rate = mean(freq)) %>%
+  # makes the sex per each race displayed horizontally rather than as different rows
+  spread(key = subject_sex, value=arrest_rate) %>% 
+  # renames the row labels for the graph
+  mutate(subject_race = fct_recode(subject_race,
+          "White" = "white",
+          "Asian/Pacific Islander" = "asian/pacific islander",
+          "Black" = "black",
+          "Hispanic" = "hispanic",
+          "Other or Unknown" = "other/unknown"
+          ))
+
+# create table
+# percetange formatting all taken care of here
+gt(race_gender) %>% 
+  # fixing column names
+  cols_label(
+    subject_race = "Subject Race",
+    male = "Male",
+    female = "Female") %>% 
+  # formats percentages as percents, when passed in columns in data
+  fmt_percent(columns = vars(male, female)) %>% 
+  # labels
+  tab_header(title = "Arrest by Race and Gender",
+            subtitle = "As Percentage") %>% 
+  tab_source_note(source_note = 
+                    "Source: Stanford Open Policing Project")
+
+```
+
+
+# Question 3
+
+```{r time_of_day, echo=FALSE, warning=FALSE, message=FALSE}
+
+# graphed hartford data by frequency, created time bins (in six hour intervals)
+hartford %>% 
+  # reformatted time as POSIXct, which is necessary for ggplot
+  ggplot(aes(x = as.POSIXct(time))) + geom_freqpoly(binwidth = 600) +
+  # fixing labels
+  labs(title = "Hartford Police Stops by Time of Day",
+       subtitle = "Not all Times Appear Equal: Minutes Count!",
+       caption = "Source: Stanford Open Policing Project",
+       x = "Hour and Minute",
+       y = "Number of Stops") +
+  # formatting time labels
+  scale_x_datetime(date_labels = "%I:%M %p") + 
+  # add theme
+  theme_economist()
+
+```
+
+
+# Question 4
+```{r stop_locations, echo=FALSE, warning=FALSE, message=FALSE}
+# I wanted to measure the location of stops during night times on weekends for 17-23 year olds to
+# maybe see where college-aged people are going out or where police might see as high-priority areas,
+# but at least to visualize where college-aged people are getting stopped during these times. I 
+# figured 11 pm was when people might start to get drunk and go out on a night out, and chose 2 am 
+# because the bars close at 2 am on weekends.
+
+stop_results <- hartford %>% 
+  # filter for night time (11 pm - 2 am)
+  filter(time < hms::as.hms("02:00:00") | time > hms::as.hms("23:00:00")) %>%
+  # filter for college "weekend" (Thursday - Saturday, inclusive)
+  filter(wday(date) >= 5 & wday(date) <= 7) %>% 
+  # filter for college age students
+  filter(subject_age <= 23 & subject_age >= 17) %>% 
+  # delete columns without latitude and longitude data
+  drop_na(lat, lng) %>% 
+  # filter out outlier (result was not in CT)
+  filter(lat>41.73 & lng > -72.71 & lng < -72.65) 
+
+# convert data rows into shape files
+stop_locations <- st_as_sf(stop_results, 
+                             coords = c("lng", "lat"), 
+                             crs = 4326) 
+
+# plot data
+ggplot(data = shapes_data) +
+  # geom_sf(), two are necessary
+  geom_sf() +
+  geom_sf(data = stop_locations) +
+  theme_map() + 
+  # labels
+  labs(title = "Location of College-Aged Stops on Weekend Nights (2013-2016)",
+       subtitle = "Stops for 17-23 Year Olds from Thurs-Sat. between 11 PM - 2:30AM", 
+       caption = "Source: Stanford Open Policing Project" )
+
+```
+
